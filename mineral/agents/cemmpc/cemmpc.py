@@ -2,6 +2,7 @@ import copy
 import time
 
 import colorednoise
+import matplotlib.animation as animation
 import matplotlib.pyplot as plt
 import numpy as np
 import torch
@@ -28,7 +29,7 @@ class CEMMPCAgent(Agent):
         self.iterations = self.cem_mpc_params.iterations
         self.timesteps = self.cem_mpc_params.timesteps
         self.beta = self.cem_mpc_params.beta
-        self.gamma = self.cem_mpc_params.gamma
+        # self.gamma = self.cem_mpc_params.gamma
         self.keep_elite_fraction = self.cem_mpc_params.keep_elite_fraction
         self.alpha = self.cem_mpc_params.alpha
 
@@ -73,9 +74,9 @@ class CEMMPCAgent(Agent):
             print(f"Time taken: {end_time - start_time}")
 
     def generate_action_sequences(self, mean, std, elite_actions, iteration=0):
-        mean_exp = mean.unsqueeze(0).expand(self.N, -1, -1)  # Shape: (N, H, action_dim)
-        std_exp = std.unsqueeze(0).expand(self.N, -1, -1)    # Shape: (N, H, action_dim)
-        action_sequences = torch.normal(mean_exp, std_exp)
+        mean_exp = mean.unsqueeze(0).expand(self.N, -1, -1)     # Shape: (N, H, action_dim)
+        std_exp = std.unsqueeze(0).expand(self.N, -1, -1)       # Shape: (N, H, action_dim)
+        action_sequences = torch.normal(mean_exp, std_exp)      # Shape: (N, H, action_dim)
 
         # Generate colored noise for each action dimension
         noise = torch.zeros((self.N, self.H, self.action_dim), device=self.device)
@@ -96,7 +97,6 @@ class CEMMPCAgent(Agent):
 
         # [iCEM 3.2] - CEM with memory
         # Keep a fraction of the elites and shift elites every iteration
-
         if (iteration == 0) and elite_actions is not None:
             num_elite_to_add = int(self.keep_elite_fraction * self.K)
             shifted_elite = np.roll(elite_actions[:num_elite_to_add], -1, axis=1)
@@ -116,7 +116,7 @@ class CEMMPCAgent(Agent):
         return action_sequences
 
     def evaluate_action_sequence_batch(self, init_state, action_sequences):
-        # Initialise rewards tensor
+        # Initialise rewards tensor with shape (N,)
         rewards = torch.zeros(self.N, device=self.device)
 
         # Copy the current state of the env to perform actions
@@ -124,7 +124,7 @@ class CEMMPCAgent(Agent):
 
         # Evaluating the actions for each time step in the horizon H
         for h in range(self.H):
-            actions_h = action_sequences[:, h, :]   # Resulting shape of actions_h: (N, action_dim)
+            actions_h = action_sequences[:, h, :]   # Shape: (N, action_dim)
             _, r ,_, _ = self.env.step(actions_h)
             rewards += r
 
@@ -142,7 +142,7 @@ class CEMMPCAgent(Agent):
             # Generation action sequences
             action_sequences = self.generate_action_sequences(mean, std, elite_actions, iteration)
 
-            # Allocate the rewards for each action sequence
+            # Allocate rewards for each action sequence
             rewards = self.evaluate_action_sequence_batch(init_state, action_sequences)
 
             # Sort the rewards array and pick only the top K elements
@@ -173,15 +173,13 @@ class CEMMPCAgent(Agent):
         obs = self.env.reset()
         self.obs = self._convert_obs(obs)
         self.dones = torch.zeros((self.num_actors,), dtype=torch.bool, device=self.device)
-
-        total_reward = 0
+        total_reward = 0.0
 
         # Create list to save actions
         best_actions_list = []
 
         # Main loop
         for timestep in range(self.timesteps):
-
             if self.dones[0]:
                 break  # Stop if real environment is done
 
@@ -190,7 +188,7 @@ class CEMMPCAgent(Agent):
 
             # Evaluate new best action
             best_action = self.cem_plan(init_state)
-            actions = best_action.unsqueeze(0).repeat(self.N, 1)
+            actions = best_action.unsqueeze(0).repeat(self.N, 1)    # Shape: (N, action_dim)
 
             # Reset state of all environments
             self.env.state_0 = init_state
@@ -220,7 +218,7 @@ class CEMMPCAgent(Agent):
         self.obs = self._convert_obs(obs)
         self.dones = torch.zeros((self.num_actors,), dtype=torch.bool, device=self.device)
 
-        reward_array = []
+        rewards = []
         actions_to_replay = torch.load('trajectory.pt')
 
         timestep = 0
@@ -231,15 +229,46 @@ class CEMMPCAgent(Agent):
 
             print(f"Timestep {timestep + 1} | Action: {action} | Reward: {reward[0]:.3f}")
             timestep += 1
-            reward_array.append(reward[0].item())
+            rewards.append(reward[0].item())
+        print("Trajectory completed")
 
-        # Plot and save reward over time
         plt.figure(figsize=(10, 6))
-        plt.plot(range(1, len(reward_array) + 1), reward_array, marker='o', linestyle='-')
+        plt.plot(rewards)
         plt.xlabel("Timestep")
         plt.ylabel("Reward")
+        plt.title("CEM MPC on Rewarped RollingFlat Task")
+        plt.legend()
         plt.grid(True)
         plt.tight_layout()
         plt.savefig("reward_plot.png", dpi=300)
 
-        print("Trajectory completed")
+        # --- Animated Plot ---
+        fig, ax = plt.subplots()
+        ax.set_xlim(0, len(rewards))
+        ax.set_ylim(min(rewards) - 0.1, max(rewards) + 0.1)
+        ax.set_xlabel("Timestep")
+        ax.set_ylabel("Reward")
+        ax.set_title("CEM MPC on Rewarped RollingFlat Task")
+
+        line, = ax.plot([], [], lw=2, label="Step Reward")
+        ax.legend()
+
+        xdata, ydata = [], []
+
+        def init():
+            line.set_data([], [])
+            return line,
+
+        def update(frame):
+            xdata.append(frame)
+            ydata.append(rewards[frame])
+            line.set_data(xdata, ydata)
+            return line,
+
+        ani = animation.FuncAnimation(
+            fig, update, frames=len(rewards),
+            init_func=init, blit=True, interval=100, repeat=False
+        )
+
+        # Save animation as GIF
+        ani.save("reward_animation.gif", writer="pillow", fps=30)
