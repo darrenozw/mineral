@@ -6,18 +6,20 @@ algo: CEMMPCAgent
 
 params:
   num_actors: 64
-  max_agent_steps: 100000
+  max_agent_steps: 100000     # Not relevant to the code
 
   # True: render results, False: evaluation
   render_results: False
   # render_results: True
+
+  seed: 11
 
 network: {}
 
 cem_mpc_params:
   H: 30                       # Planning horizon
   N: 64                       # Number of samples (action sequences)
-  K: 8                        # Number of elites
+  K: 10                       # Number of elites
   iterations: 3               # CEM optimization iterations
   timesteps: 300              # Number of timesteps
   beta: 1.0                   # colored-noise exponent (pink noise)

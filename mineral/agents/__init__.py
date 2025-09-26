@@ -6,5 +6,4 @@ from .ppo.ppo import PPO
 from .sac.sac import SAC
 
 # Add new agent here
-# from .random.random import RandomAgent
 from .cemmpc.cemmpc import CEMMPCAgent
