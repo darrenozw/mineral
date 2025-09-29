@@ -54,7 +54,7 @@ legend.get_frame().set_facecolor("white")
 legend.get_frame().set_alpha(1.0)
 plt.grid(True)
 plt.tight_layout()
-plt.savefig("reward_comparison.png", dpi=300)
+plt.savefig("rewarped_reward_comparison.png", dpi=300)
 
 # --- Animated Plot (mean reward curves growing over time) ---
 fig, ax = plt.subplots(figsize=(10, 6))
@@ -91,4 +91,4 @@ ani = animation.FuncAnimation(
     init_func=init, blit=True, interval=50, repeat=False
 )
 
-ani.save("reward_comparison.gif", writer="pillow", fps=30)
+ani.save("rewarped_reward_comparison.gif", writer="pillow", fps=30)
